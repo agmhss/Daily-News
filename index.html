@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AGMHSS NEWS</title>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<style>
+  body {
+    font-family: "Segoe UI", sans-serif;
+    background: #f8fbff;
+    color: #111;
+    margin: 0;
+    padding: 0;
+  }
+  header {
+    background: #2b6bff;
+    color: #fff;
+    padding: 15px;
+    font-size: 22px;
+    font-weight: bold;
+    text-align: center;
+  }
+  #controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+    margin: 15px;
+  }
+  button, select, input[type=range] {
+    font-size: 15px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+  }
+  button {
+    background: #2b6bff;
+    color: white;
+    border: none;
+  }
+  button:hover { background: #1d4ed8; }
+  #news {
+    max-width: 800px;
+    margin: auto;
+    padding: 10px;
+  }
+  section { margin-top: 25px; }
+  h2 { border-bottom: 2px solid #ddd; padding-bottom: 4px; }
+  article {
+    display: flex;
+    gap: 10px;
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    padding: 8px;
+    background: white;
+    margin-bottom: 10px;
+  }
+  article img {
+    width: 90px;
+    height: 90px;
+    object-fit: cover;
+    border-radius: 6px;
+  }
+  .meta {
+    font-size: 12px;
+    color: #555;
+  }
+  a { color: #2b6bff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<header>🗞️ AGMHSS DAILY NEWS 🗞️</header>
+
+<div id="controls">
+  <button id="playBtn">▶ Play</button>
+  <button id="pauseBtn">⏸ Pause</button>
+  <button id="resumeBtn">⏵ Resume</button>
+  <button id="stopBtn">⏹ Stop</button>
+  <label>Speed:
+    <input id="speedRange" type="range" min="0.7" max="1.3" step="0.05" value="0.95" />
+    <span id="speedLabel">0.95×</span>
+  </label>
+  <button id="pdfBtn">💾 Save as PDF</button>
+</div>
+
+<div id="news">Loading authentic sources…</div>
+
+<script>
+const FEEDS = {
+  regional: ["https://www.thehindu.com/news/national/tamil-nadu/feeder/default.rss"],
+  national: ["https://timesofindia.indiatimes.com/rssfeedstopstories.cms"
+  ],
+  international: ["https://feeds.bbci.co.uk/news/world/rss.xml"]
+};
+const MIX = { regional: 0.5, national: 0.3, international: 0.2 };
+const TOTAL = 10;
+
+// --- Helpers ---
+function stripHtml(html) {
+  const div = document.createElement("div");
+  div.innerHTML = html || "";
+  return (div.textContent || div.innerText || "").replace(/\s+/g, " ").trim();
+}
+function parseFirstImg(html) {
+  const div = document.createElement("div");
+  div.innerHTML = html;
+  const img = div.querySelector("img");
+  return img ? img.src : "";
+}
+function chooseThumb(it) {
+  const thumb = it.querySelector("media\\:thumbnail, thumbnail");
+  if (thumb?.getAttribute("url")) return thumb.getAttribute("url");
+  const content = it.querySelector("media\\:content");
+  if (content?.getAttribute("url")) return content.getAttribute("url");
+  const enclosure = it.querySelector("enclosure");
+  if (enclosure && (enclosure.getAttribute("type") || "").startsWith("image"))
+    return enclosure.getAttribute("url");
+  const desc = it.querySelector("description")?.textContent || "";
+  return parseFirstImg(desc);
+}
+
+// --- RSS Fetch ---
+async function fetchRSS(url) {
+  const proxy = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+  const res = await fetch(proxy);
+  if (!res.ok) throw new Error("fetch failed");
+  const data = await res.json();
+  return data.contents;
+}
+
+async function parseRSS(url) {
+  try {
+    const xmlStr = await fetchRSS(url);
+    const xml = new DOMParser().parseFromString(xmlStr, "application/xml");
+    return Array.from(xml.querySelectorAll("item")).map((it, i) => ({
+      id: url + "#" + i,
+      title: stripHtml(it.querySelector("title")?.textContent || ""),
+      description: stripHtml(it.querySelector("description")?.textContent || ""),
+      link: it.querySelector("link")?.textContent || "",
+      pubDate: it.querySelector("pubDate")?.textContent || "",
+      image: chooseThumb(it),
+      source: new URL(url).host
+    }));
+  } catch (e) {
+    console.warn("Feed failed", url, e);
+    return [];
+  }
+}
+
+async function loadAll() {
+  const lists = await Promise.all([
+    parseRSS(FEEDS.regional[0]),
+    parseRSS(FEEDS.national[0]).then(r => r.length ? r : parseRSS(FEEDS.national[1])),
+    parseRSS(FEEDS.international[0])
+  ]);
+  const dedupe = (arr, lim) => {
+    const seen = new Set();
+    const out = [];
+    for (const a of arr) {
+      const k = a.title.toLowerCase();
+      if (!seen.has(k)) {
+        seen.add(k);
+        out.push(a);
+        if (out.length >= lim) break;
+      }
+    }
+    return out;
+  };
+  return {
+    regional: dedupe(lists[0], Math.round(TOTAL * MIX.regional) || 5),
+    national: dedupe(lists[1], Math.round(TOTAL * MIX.national) || 3),
+    international: dedupe(lists[2], Math.round(TOTAL * MIX.international) || 2)
+  };
+}
+
+// --- Rendering ---
+function renderNews(all) {
+  const container = document.getElementById("news");
+  container.innerHTML = "";
+  const createSection = (title, arr) => {
+    const sec = document.createElement("section");
+    const h2 = document.createElement("h2");
+    h2.textContent = title;
+    sec.appendChild(h2);
+    arr.forEach(a => {
+      const art = document.createElement("article");
+      if (a.image) {
+        const img = document.createElement("img");
+        img.src = a.image;
+        img.onerror = () => img.remove();
+        art.appendChild(img);
+      }
+      const div = document.createElement("div");
+      div.innerHTML = `
+        <div class='meta'>${a.source} ${a.pubDate ? "• " + new Date(a.pubDate).toLocaleString() : ""}</div>
+        <h3>${a.title}</h3>
+        <p>${a.description}</p>
+        <a href='${a.link}' target='_blank'>Read more ↗</a>`;
+      art.appendChild(div);
+      sec.appendChild(art);
+    });
+    container.appendChild(sec);
+  };
+  createSection("Regional – Tamil Nadu", all.regional);
+  createSection("National – India", all.national);
+  createSection("International", all.international);
+}
+
+// --- Voice Setup ---
+let allVoices = [];
+function loadVoices() { allVoices = window.speechSynthesis.getVoices(); }
+window.speechSynthesis.onvoiceschanged = loadVoices;
+
+function getVoice(gender) {
+  if (!allVoices.length) loadVoices();
+  const femaleNames = ["Google UK English Female","Microsoft Zira","Samantha","Neerja"];
+  const maleNames = ["Google UK English Male","Microsoft David","Alex","Heera"];
+  const list = gender==="male"?maleNames:femaleNames;
+  return allVoices.find(v => list.some(n => v.name.includes(n))) ||
+         allVoices.find(v => v.lang.startsWith("en")) || allVoices[0];
+}
+
+// --- Script Builder ---
+function buildScript(n) {
+  const date = new Date().toLocaleDateString("en-IN",{year:"numeric",month:"long",day:"numeric"});
+  return [
+    { gender: "female", text: `Good day. This is your AGMHSS Daily News bulletin for ${date}.` },
+    { gender: "male", text: `Regional News – Tamil Nadu.` },
+    ...n.regional.map((a,i)=>({gender:"male", text:`${i+1}. ${a.title}. ${a.description.split(/[.?!]/)[0]}.`})),
+    { gender: "female", text: `National News – India.` },
+    ...n.national.map((a,i)=>({gender:"female", text:`${i+1}. ${a.title}. ${a.description.split(/[.?!]/)[0]}.`})),
+    { gender: "male", text: `International Headlines.` },
+    ...n.international.map((a,i)=>({gender:"male", text:`${i+1}. ${a.title}. ${a.description.split(/[.?!]/)[0]}.`})),
+    { gender: "female", text: `That concludes the AGMHSS Daily News bulletin. Have a great day ahead!` }
+  ];
+}
+
+// --- Speak ---
+function speakNews(news, rate) {
+  window.speechSynthesis.cancel();
+  const parts = buildScript(news);
+  const maleVoice = getVoice("male");
+  const femaleVoice = getVoice("female");
+
+  parts.forEach(p => {
+    const u = new SpeechSynthesisUtterance(p.text);
+    u.lang = "en-IN";
+    u.voice = p.gender==="male" ? maleVoice : femaleVoice;
+    u.rate = rate;
+    u.pitch = p.gender==="male" ? 1.0 : 1.15;
+    u.volume = 1;
+    window.speechSynthesis.speak(u);
+  });
+}
+
+// --- PDF (fills one page naturally with balanced spacing) ---
+function saveAsPDF(news) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: "pt", format: "a4" });
+
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 50;
+  const maxW = pageW - margin * 2;
+
+  const date = new Date().toLocaleDateString("en-IN", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+
+  // --- Title ---
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(18);
+  const title = `AGMHSS Daily News – ${date}`;
+  const titleWidth = doc.getTextWidth(title);
+  let y = margin + 10;
+  doc.text(title, (pageW - titleWidth) / 2, y);
+  y += 25;
+
+  // --- Gather all text content first ---
+  const textBlocks = [];
+  const add = (label, arr) => {
+    if (!arr.length) return;
+    textBlocks.push({ text: label, size: 14, bold: true });
+    arr.forEach((a, i) => {
+      textBlocks.push({ text: `${i + 1}. ${a.title}`, size: 11, bold: true });
+      if (a.description) textBlocks.push({ text: a.description, size: 10, bold: false });
+    });
+    textBlocks.push({ text: " ", size: 4, bold: false });
+  };
+  add("Regional – Tamil Nadu", news.regional);
+  add("National – India", news.national);
+  add("International", news.international);
+
+  // --- Split into individual lines first ---
+  let lines = [];
+  const maxLineWidth = maxW;
+  textBlocks.forEach(block => {
+    doc.setFont("helvetica", block.bold ? "bold" : "normal");
+    doc.setFontSize(block.size);
+    const wrapped = doc.splitTextToSize(block.text, maxLineWidth);
+    wrapped.forEach(line => lines.push({ text: line, size: block.size, bold: block.bold }));
+  });
+
+  // --- Calculate spacing to fill exactly one page ---
+  const topSpace = y;
+  const bottomSpace = margin + 20;
+  const usableHeight = pageH - topSpace - bottomSpace;
+  const totalTextHeight = lines.reduce((sum, l) => sum + l.size + 2, 0);
+  const extraSpace = usableHeight - totalTextHeight;
+  const lineGap = extraSpace > 0 ? extraSpace / lines.length : 0;
+
+  // --- Print all lines with balanced spacing ---
+  lines.forEach(line => {
+    if (y > pageH - margin) return; // just in case
+    doc.setFont("helvetica", line.bold ? "bold" : "normal");
+    doc.setFontSize(line.size);
+    doc.text(line.text, margin, y);
+    y += line.size + 2 + lineGap;
+  });
+
+  doc.save(`AGMHSS_News_${date.replace(/\s+/g, "_")}.pdf`);
+}
+
+// --- Init ---
+(async ()=>{
+  try {
+    const all = await loadAll();
+    renderNews(all);
+    const play=document.getElementById('playBtn'),
+          pause=document.getElementById('pauseBtn'),
+          resume=document.getElementById('resumeBtn'),
+          stop=document.getElementById('stopBtn'),
+          speed=document.getElementById('speedRange'),
+          label=document.getElementById('speedLabel'),
+          pdfBtn=document.getElementById('pdfBtn');
+    let rate=parseFloat(speed.value);
+    speed.oninput=()=>{rate=parseFloat(speed.value); label.textContent=rate.toFixed(2)+'×';};
+    play.onclick=()=>speakNews(all,rate);
+    pause.onclick=()=>speechSynthesis.pause();
+    resume.onclick=()=>speechSynthesis.resume();
+    stop.onclick=()=>speechSynthesis.cancel();
+    pdfBtn.onclick=()=>saveAsPDF(all);
+  } catch (e) {
+    document.getElementById("news").innerHTML = "<p style='color:red'>Failed to load news feeds. Please try again later.</p>";
+  }
+})();
+</script>
+</body>
+</html>
