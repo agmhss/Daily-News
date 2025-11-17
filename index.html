@@ -90,8 +90,7 @@
 <script>
 const FEEDS = {
   regional: ["https://www.thehindu.com/news/national/tamil-nadu/feeder/default.rss"],
-  national: ["https://timesofindia.indiatimes.com/rssfeedstopstories.cms"
-  ],
+  national: ["https://timesofindia.indiatimes.com/rssfeedstopstories.cms"],
   international: ["https://feeds.bbci.co.uk/news/world/rss.xml"]
 };
 const MIX = { regional: 0.5, national: 0.3, international: 0.2 };
@@ -119,6 +118,31 @@ function chooseThumb(it) {
     return enclosure.getAttribute("url");
   const desc = it.querySelector("description")?.textContent || "";
   return parseFirstImg(desc);
+}
+
+// --- Student-friendly filter ---
+function filterStudentNews(arr) {
+  const badWords = [
+    "murder","kill","shot","violence","rape","abuse",
+    "theft","robbery","stolen","crime","arrest","assault",
+    "politics","election","party","campaign","protest","scam",
+    "terror","bomb","attack","court","hijack","fraud","surrender"
+  ];
+
+  const goodWords = [
+    "education","students","school","exam","competition","scholarship",
+    "sports","match","tournament","victory","medal","championship",
+    "science","technology","space","isro","nasa","research",
+    "award","achievement","innovation","discovery","environment",
+    "astronomy","robotics","health","youth","children"
+  ];
+
+  return arr.filter(n => {
+    const text = (n.title + " " + n.description).toLowerCase();
+    if (badWords.some(b => text.includes(b))) return false;
+    if (goodWords.some(g => text.includes(g))) return true;
+    return true; // allow neutral news
+  });
 }
 
 // --- RSS Fetch ---
@@ -152,9 +176,10 @@ async function parseRSS(url) {
 async function loadAll() {
   const lists = await Promise.all([
     parseRSS(FEEDS.regional[0]),
-    parseRSS(FEEDS.national[0]).then(r => r.length ? r : parseRSS(FEEDS.national[1])),
+    parseRSS(FEEDS.national[0]),
     parseRSS(FEEDS.international[0])
   ]);
+
   const dedupe = (arr, lim) => {
     const seen = new Set();
     const out = [];
@@ -168,10 +193,11 @@ async function loadAll() {
     }
     return out;
   };
+
   return {
-    regional: dedupe(lists[0], Math.round(TOTAL * MIX.regional) || 5),
-    national: dedupe(lists[1], Math.round(TOTAL * MIX.national) || 3),
-    international: dedupe(lists[2], Math.round(TOTAL * MIX.international) || 2)
+    regional: filterStudentNews(dedupe(lists[0], Math.round(TOTAL * MIX.regional) || 5)),
+    national: filterStudentNews(dedupe(lists[1], Math.round(TOTAL * MIX.national) || 3)),
+    international: filterStudentNews(dedupe(lists[2], Math.round(TOTAL * MIX.international) || 2))
   };
 }
 
@@ -229,10 +255,13 @@ function buildScript(n) {
     { gender: "female", text: `Good day. This is your AGMHSS Daily News bulletin for ${date}.` },
     { gender: "male", text: `Regional News – Tamil Nadu.` },
     ...n.regional.map((a,i)=>({gender:"male", text:`${i+1}. ${a.title}. ${a.description.split(/[.?!]/)[0]}.`})),
+
     { gender: "female", text: `National News – India.` },
     ...n.national.map((a,i)=>({gender:"female", text:`${i+1}. ${a.title}. ${a.description.split(/[.?!]/)[0]}.`})),
+
     { gender: "male", text: `International Headlines.` },
     ...n.international.map((a,i)=>({gender:"male", text:`${i+1}. ${a.title}. ${a.description.split(/[.?!]/)[0]}.`})),
+
     { gender: "female", text: `That concludes the AGMHSS Daily News bulletin. Have a great day ahead!` }
   ];
 }
@@ -255,7 +284,7 @@ function speakNews(news, rate) {
   });
 }
 
-// --- PDF (fills one page naturally with balanced spacing) ---
+// --- PDF ---
 function saveAsPDF(news) {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: "pt", format: "a4" });
@@ -271,7 +300,6 @@ function saveAsPDF(news) {
     day: "numeric",
   });
 
-  // --- Title ---
   doc.setFont("helvetica", "bold");
   doc.setFontSize(18);
   const title = `AGMHSS Daily News – ${date}`;
@@ -280,7 +308,6 @@ function saveAsPDF(news) {
   doc.text(title, (pageW - titleWidth) / 2, y);
   y += 25;
 
-  // --- Gather all text content first ---
   const textBlocks = [];
   const add = (label, arr) => {
     if (!arr.length) return;
@@ -295,7 +322,6 @@ function saveAsPDF(news) {
   add("National – India", news.national);
   add("International", news.international);
 
-  // --- Split into individual lines first ---
   let lines = [];
   const maxLineWidth = maxW;
   textBlocks.forEach(block => {
@@ -305,7 +331,6 @@ function saveAsPDF(news) {
     wrapped.forEach(line => lines.push({ text: line, size: block.size, bold: block.bold }));
   });
 
-  // --- Calculate spacing to fill exactly one page ---
   const topSpace = y;
   const bottomSpace = margin + 20;
   const usableHeight = pageH - topSpace - bottomSpace;
@@ -313,9 +338,8 @@ function saveAsPDF(news) {
   const extraSpace = usableHeight - totalTextHeight;
   const lineGap = extraSpace > 0 ? extraSpace / lines.length : 0;
 
-  // --- Print all lines with balanced spacing ---
   lines.forEach(line => {
-    if (y > pageH - margin) return; // just in case
+    if (y > pageH - margin) return;
     doc.setFont("helvetica", line.bold ? "bold" : "normal");
     doc.setFontSize(line.size);
     doc.text(line.text, margin, y);
@@ -337,6 +361,7 @@ function saveAsPDF(news) {
           speed=document.getElementById('speedRange'),
           label=document.getElementById('speedLabel'),
           pdfBtn=document.getElementById('pdfBtn');
+
     let rate=parseFloat(speed.value);
     speed.oninput=()=>{rate=parseFloat(speed.value); label.textContent=rate.toFixed(2)+'×';};
     play.onclick=()=>speakNews(all,rate);
@@ -344,8 +369,10 @@ function saveAsPDF(news) {
     resume.onclick=()=>speechSynthesis.resume();
     stop.onclick=()=>speechSynthesis.cancel();
     pdfBtn.onclick=()=>saveAsPDF(all);
+
   } catch (e) {
-    document.getElementById("news").innerHTML = "<p style='color:red'>Failed to load news feeds. Please try again later.</p>";
+    document.getElementById("news").innerHTML =
+      "<p style='color:red'>Failed to load news feeds. Please try again later.</p>";
   }
 })();
 </script>
