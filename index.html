@@ -38,6 +38,7 @@
     background: #2b6bff;
     color: white;
     border: none;
+    cursor: pointer;
   }
   button:hover { background: #1d4ed8; }
   #news {
@@ -68,6 +69,7 @@
   }
   a { color: #2b6bff; text-decoration: none; }
   a:hover { text-decoration: underline; }
+  .error-msg { color: #d32f2f; text-align: center; font-weight: bold; }
 </style>
 </head>
 <body>
@@ -85,14 +87,16 @@
   <button id="pdfBtn">💾 Save as PDF</button>
 </div>
 
-<div id="news">Loading authentic sources…</div>
+<div id="news"><p style="text-align: center;">Loading authentic sources…</p></div>
 
 <script>
+// Updated to highly reliable RSS feeds
 const FEEDS = {
   regional: ["https://www.thehindu.com/news/national/tamil-nadu/feeder/default.rss"],
   national: ["https://timesofindia.indiatimes.com/rssfeedstopstories.cms"],
   international: ["https://feeds.bbci.co.uk/news/world/rss.xml"]
 };
+
 const MIX = { regional: 0.5, national: 0.3, international: 0.2 };
 const TOTAL = 10;
 
@@ -102,22 +106,12 @@ function stripHtml(html) {
   div.innerHTML = html || "";
   return (div.textContent || div.innerText || "").replace(/\s+/g, " ").trim();
 }
+
 function parseFirstImg(html) {
   const div = document.createElement("div");
-  div.innerHTML = html;
+  div.innerHTML = html || "";
   const img = div.querySelector("img");
   return img ? img.src : "";
-}
-function chooseThumb(it) {
-  const thumb = it.querySelector("media\\:thumbnail, thumbnail");
-  if (thumb?.getAttribute("url")) return thumb.getAttribute("url");
-  const content = it.querySelector("media\\:content");
-  if (content?.getAttribute("url")) return content.getAttribute("url");
-  const enclosure = it.querySelector("enclosure");
-  if (enclosure && (enclosure.getAttribute("type") || "").startsWith("image"))
-    return enclosure.getAttribute("url");
-  const desc = it.querySelector("description")?.textContent || "";
-  return parseFirstImg(desc);
 }
 
 // --- Student-friendly filter ---
@@ -145,30 +139,30 @@ function filterStudentNews(arr) {
   });
 }
 
-// --- RSS Fetch ---
-async function fetchRSS(url) {
-  const proxy = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
-  const res = await fetch(proxy);
-  if (!res.ok) throw new Error("fetch failed");
-  const data = await res.json();
-  return data.contents;
-}
-
+// --- Robust RSS Fetch using RSS2JSON ---
 async function parseRSS(url) {
   try {
-    const xmlStr = await fetchRSS(url);
-    const xml = new DOMParser().parseFromString(xmlStr, "application/xml");
-    return Array.from(xml.querySelectorAll("item")).map((it, i) => ({
+    // RSS2JSON API handles the XML-to-JSON conversion reliably and bypasses CORS
+    const apiUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}`;
+    const res = await fetch(apiUrl);
+    
+    if (!res.ok) throw new Error("Network response was not ok");
+    const data = await res.json();
+    
+    if (data.status !== 'ok') throw new Error("RSS API failed to parse feed");
+
+    return data.items.map((it, i) => ({
       id: url + "#" + i,
-      title: stripHtml(it.querySelector("title")?.textContent || ""),
-      description: stripHtml(it.querySelector("description")?.textContent || ""),
-      link: it.querySelector("link")?.textContent || "",
-      pubDate: it.querySelector("pubDate")?.textContent || "",
-      image: chooseThumb(it),
+      title: stripHtml(it.title || ""),
+      description: stripHtml(it.description || ""),
+      link: it.link || "",
+      pubDate: it.pubDate || "",
+      // Extracts image from thumbnail, enclosure, or directly from the HTML content
+      image: it.thumbnail || (it.enclosure && it.enclosure.link) || parseFirstImg(it.content || it.description) || "",
       source: new URL(url).host
     }));
   } catch (e) {
-    console.warn("Feed failed", url, e);
+    console.warn("Feed failed to load:", url, e);
     return [];
   }
 }
@@ -205,11 +199,19 @@ async function loadAll() {
 function renderNews(all) {
   const container = document.getElementById("news");
   container.innerHTML = "";
+  
+  if (!all.regional.length && !all.national.length && !all.international.length) {
+      container.innerHTML = "<p class='error-msg'>Feeds are currently unavailable. Please refresh or try again later.</p>";
+      return;
+  }
+
   const createSection = (title, arr) => {
+    if (!arr || arr.length === 0) return; // Hide section if no valid news
     const sec = document.createElement("section");
     const h2 = document.createElement("h2");
     h2.textContent = title;
     sec.appendChild(h2);
+    
     arr.forEach(a => {
       const art = document.createElement("article");
       if (a.image) {
@@ -229,6 +231,7 @@ function renderNews(all) {
     });
     container.appendChild(sec);
   };
+  
   createSection("Regional – Tamil Nadu", all.regional);
   createSection("National – India", all.national);
   createSection("International", all.international);
@@ -243,7 +246,7 @@ function getVoice(gender) {
   if (!allVoices.length) loadVoices();
   const femaleNames = ["Google UK English Female","Microsoft Zira","Samantha","Neerja"];
   const maleNames = ["Google UK English Male","Microsoft David","Alex","Heera"];
-  const list = gender==="male"?maleNames:femaleNames;
+  const list = gender === "male" ? maleNames : femaleNames;
   return allVoices.find(v => list.some(n => v.name.includes(n))) ||
          allVoices.find(v => v.lang.startsWith("en")) || allVoices[0];
 }
@@ -251,19 +254,27 @@ function getVoice(gender) {
 // --- Script Builder ---
 function buildScript(n) {
   const date = new Date().toLocaleDateString("en-IN",{year:"numeric",month:"long",day:"numeric"});
-  return [
-    { gender: "female", text: `Good day. This is your AGMHSS Daily News bulletin for ${date}.` },
-    { gender: "male", text: `Regional News – Tamil Nadu.` },
-    ...n.regional.map((a,i)=>({gender:"male", text:`${i+1}. ${a.title}. ${a.description.split(/[.?!]/)[0]}.`})),
-
-    { gender: "female", text: `National News – India.` },
-    ...n.national.map((a,i)=>({gender:"female", text:`${i+1}. ${a.title}. ${a.description.split(/[.?!]/)[0]}.`})),
-
-    { gender: "male", text: `International Headlines.` },
-    ...n.international.map((a,i)=>({gender:"male", text:`${i+1}. ${a.title}. ${a.description.split(/[.?!]/)[0]}.`})),
-
-    { gender: "female", text: `That concludes the AGMHSS Daily News bulletin. Have a great day ahead!` }
+  const script = [
+    { gender: "female", text: `Good day. This is your AGMHSS Daily News bulletin for ${date}.` }
   ];
+
+  if (n.regional.length) {
+      script.push({ gender: "male", text: `Regional News – Tamil Nadu.` });
+      n.regional.forEach((a, i) => script.push({gender:"male", text:`${i+1}. ${a.title}. ${a.description.split(/[.?!]/)[0]}.`}));
+  }
+
+  if (n.national.length) {
+      script.push({ gender: "female", text: `National News – India.` });
+      n.national.forEach((a, i) => script.push({gender:"female", text:`${i+1}. ${a.title}. ${a.description.split(/[.?!]/)[0]}.`}));
+  }
+
+  if (n.international.length) {
+      script.push({ gender: "male", text: `International Headlines.` });
+      n.international.forEach((a, i) => script.push({gender:"male", text:`${i+1}. ${a.title}. ${a.description.split(/[.?!]/)[0]}.`}));
+  }
+
+  script.push({ gender: "female", text: `That concludes the AGMHSS Daily News bulletin. Have a great day ahead!` });
+  return script;
 }
 
 // --- Speak ---
@@ -276,9 +287,9 @@ function speakNews(news, rate) {
   parts.forEach(p => {
     const u = new SpeechSynthesisUtterance(p.text);
     u.lang = "en-IN";
-    u.voice = p.gender==="male" ? maleVoice : femaleVoice;
+    u.voice = p.gender === "male" ? maleVoice : femaleVoice;
     u.rate = rate;
-    u.pitch = p.gender==="male" ? 1.0 : 1.15;
+    u.pitch = p.gender === "male" ? 1.0 : 1.15;
     u.volume = 1;
     window.speechSynthesis.speak(u);
   });
@@ -310,7 +321,7 @@ function saveAsPDF(news) {
 
   const textBlocks = [];
   const add = (label, arr) => {
-    if (!arr.length) return;
+    if (!arr || !arr.length) return;
     textBlocks.push({ text: label, size: 14, bold: true });
     arr.forEach((a, i) => {
       textBlocks.push({ text: `${i + 1}. ${a.title}`, size: 11, bold: true });
@@ -318,6 +329,7 @@ function saveAsPDF(news) {
     });
     textBlocks.push({ text: " ", size: 4, bold: false });
   };
+  
   add("Regional – Tamil Nadu", news.regional);
   add("National – India", news.national);
   add("International", news.international);
@@ -354,25 +366,26 @@ function saveAsPDF(news) {
   try {
     const all = await loadAll();
     renderNews(all);
-    const play=document.getElementById('playBtn'),
-          pause=document.getElementById('pauseBtn'),
-          resume=document.getElementById('resumeBtn'),
-          stop=document.getElementById('stopBtn'),
-          speed=document.getElementById('speedRange'),
-          label=document.getElementById('speedLabel'),
-          pdfBtn=document.getElementById('pdfBtn');
+    
+    const play = document.getElementById('playBtn'),
+          pause = document.getElementById('pauseBtn'),
+          resume = document.getElementById('resumeBtn'),
+          stop = document.getElementById('stopBtn'),
+          speed = document.getElementById('speedRange'),
+          label = document.getElementById('speedLabel'),
+          pdfBtn = document.getElementById('pdfBtn');
 
-    let rate=parseFloat(speed.value);
-    speed.oninput=()=>{rate=parseFloat(speed.value); label.textContent=rate.toFixed(2)+'×';};
-    play.onclick=()=>speakNews(all,rate);
-    pause.onclick=()=>speechSynthesis.pause();
-    resume.onclick=()=>speechSynthesis.resume();
-    stop.onclick=()=>speechSynthesis.cancel();
-    pdfBtn.onclick=()=>saveAsPDF(all);
+    let rate = parseFloat(speed.value);
+    speed.oninput = () => { rate = parseFloat(speed.value); label.textContent = rate.toFixed(2) + '×'; };
+    play.onclick = () => speakNews(all, rate);
+    pause.onclick = () => speechSynthesis.pause();
+    resume.onclick = () => speechSynthesis.resume();
+    stop.onclick = () => speechSynthesis.cancel();
+    pdfBtn.onclick = () => saveAsPDF(all);
 
   } catch (e) {
     document.getElementById("news").innerHTML =
-      "<p style='color:red'>Failed to load news feeds. Please try again later.</p>";
+      "<p class='error-msg'>Failed to load news feeds. Please try again later.</p>";
   }
 })();
 </script>
