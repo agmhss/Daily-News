@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AGMHSS DAILY NEWS</title>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<style>
+  :root {
+    --primary: #1e40af;
+    --primary-light: #2b6bff;
+    --bg: #f4f8ff;
+    --card-bg: #ffffff;
+    --text: #111827;
+    --muted: #6b7280;
+    --accent-schedule: #0d9488;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+  header {
+    background: linear-gradient(135deg, var(--primary), var(--primary-light));
+    color: #fff;
+    padding: 18px 15px;
+    text-align: center;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  }
+  header h1 {
+    margin: 0;
+    font-size: 24px;
+    letter-spacing: 0.5px;
+  }
+  header .date-sub {
+    font-size: 14px;
+    opacity: 0.9;
+    margin-top: 4px;
+  }
+  #controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+    align-items: center;
+    margin: 15px auto;
+    padding: 10px 16px;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    max-width: 880px;
+  }
+  button, select, input[type=range] {
+    font-size: 14px;
+    padding: 7px 12px;
+    border-radius: 8px;
+    border: 1px solid #d1d5db;
+    font-weight: 600;
+  }
+  button {
+    background: var(--primary-light);
+    color: white;
+    border: none;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+  }
+  button:hover { background: var(--primary); }
+  button:active { transform: scale(0.98); }
+  .speed-wrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  #main-container {
+    max-width: 880px;
+    width: 100%;
+    margin: 0 auto 30px;
+    padding: 0 14px;
+    flex: 1;
+  }
+  /* Schedule Card */
+  #schedule-box {
+    background: linear-gradient(135deg, #f0fdfa, #ccfbf1);
+    border: 1px solid #99f6e4;
+    border-left: 6px solid var(--accent-schedule);
+    border-radius: 12px;
+    padding: 14px 18px;
+    margin-bottom: 24px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+  }
+  #schedule-box h2 {
+    margin: 0 0 10px 0;
+    font-size: 18px;
+    color: #0f766e;
+    border: none;
+    padding: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  #schedule-box h2 a {
+    font-size: 12px;
+    font-weight: 600;
+    color: #0f766e;
+    text-decoration: underline;
+  }
+  .schedule-list {
+    margin: 0;
+    padding-left: 20px;
+  }
+  .schedule-list li {
+    margin-bottom: 6px;
+    font-size: 15px;
+    color: #134e4a;
+    line-height: 1.4;
+  }
+  .schedule-badge {
+    display: inline-block;
+    background: #0d9488;
+    color: #fff;
+    font-size: 11px;
+    font-weight: bold;
+    padding: 2px 7px;
+    border-radius: 4px;
+    margin-right: 6px;
+    text-transform: uppercase;
+  }
+  .no-schedule {
+    margin: 0;
+    font-size: 14px;
+    color: #0f766e;
+    font-style: italic;
+  }
+
+  /* News Sections */
+  section { margin-top: 26px; }
+  h2 {
+    border-bottom: 2px solid #dbeafe;
+    padding-bottom: 6px;
+    color: var(--primary);
+    font-size: 19px;
+  }
+  article {
+    display: flex;
+    gap: 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 12px;
+    background: var(--card-bg);
+    margin-bottom: 12px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+  }
+  article img {
+    width: 95px;
+    height: 95px;
+    object-fit: cover;
+    border-radius: 8px;
+    flex-shrink: 0;
+  }
+  article h3 {
+    margin: 4px 0 6px;
+    font-size: 16px;
+    line-height: 1.35;
+  }
+  article p {
+    margin: 0 0 8px;
+    font-size: 14px;
+    color: #374151;
+    line-height: 1.45;
+  }
+  .meta {
+    font-size: 12px;
+    color: var(--muted);
+    font-weight: 500;
+  }
+  a { color: var(--primary-light); text-decoration: none; font-weight: 600; font-size: 13px; }
+  a:hover { text-decoration: underline; }
+  .error-msg { color: #dc2626; text-align: center; font-weight: bold; padding: 20px; }
+  .loading-msg { text-align: center; color: var(--muted); padding: 25px; font-weight: 500; }
+  footer {
+    text-align: center;
+    padding: 14px;
+    font-size: 13px;
+    color: var(--muted);
+    border-top: 1px solid #e5e7eb;
+    background: #fff;
+    margin-top: auto;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🗞️ AGMHSS DAILY NEWS 🗞️</h1>
+  <div class="date-sub" id="headerDate"></div>
+</header>
+
+<div id="controls">
+  <button id="playBtn">▶ Play Bulletin</button>
+  <button id="pauseBtn">⏸ Pause</button>
+  <button id="resumeBtn">⏵ Resume</button>
+  <button id="stopBtn">⏹ Stop</button>
+  <div class="speed-wrap">
+    <label for="speedRange">Speed:</label>
+    <input id="speedRange" type="range" min="0.7" max="1.3" step="0.05" value="0.95" />
+    <span id="speedLabel">0.95×</span>
+  </div>
+  <button id="pdfBtn">💾 Save as PDF</button>
+</div>
+
+<div id="main-container">
+  <!-- Live School Schedule Section -->
+  <div id="schedule-box">
+    <h2>
+      <span>📅 Today's School Schedule</span>
+      <a href="https://agmhss.github.io/scheduler" target="_blank">Open Scheduler ↗</a>
+    </h2>
+    <div id="schedule-content">
+      <p class="no-schedule">Checking today's schedule from agmhss.github.io/scheduler…</p>
+    </div>
+  </div>
+
+  <!-- News Feeds Container -->
+  <div id="news">
+    <p class="loading-msg">Loading authentic student-friendly news feeds…</p>
+  </div>
+</div>
+
+<footer>Designed by Thiraviya Kumar G</footer>
+
+<script>
+const SCHEDULER_URL = "https://agmhss.github.io/scheduler";
+
+// Expanded multi-source RSS feeds
+const FEEDS = {
+  regional: [
+    "https://www.thehindu.com/news/national/tamil-nadu/feeder/default.rss",
+    "https://www.thehindu.com/news/cities/chennai/feeder/default.rss",
+    "https://www.thehindu.com/news/cities/tiruchirapalli/feeder/default.rss"
+  ],
+  national: [
+    "https://www.thehindu.com/news/national/feeder/default.rss",
+    "https://timesofindia.indiatimes.com/rssfeeds/-2128936835.cms", // TOI India-only feed
+    "https://indianexpress.com/section/india/feed/"
+  ],
+  education: [
+    "https://www.thehindu.com/education/feeder/default.rss",
+    "https://indianexpress.com/section/education/feed/",
+    "https://timesofindia.indiatimes.com/rssfeeds/913168846.cms"
+  ],
+  sports: [
+    "https://www.thehindu.com/sport/feeder/default.rss",
+    "https://timesofindia.indiatimes.com/rssfeeds/4719148.cms",
+    "https://feeds.feedburner.com/ndtvsports-latest"
+  ],
+  international: [
+    "https://feeds.bbci.co.uk/news/world/rss.xml",
+    "https://www.thehindu.com/news/international/feeder/default.rss"
+  ]
+};
+
+// Items per category
+const LIMITS = {
+  regional: 4,
+  national: 4,
+  education: 4,
+  sports: 4,
+  international: 2
+};
+
+// Display current date in header
+const todayObj = new Date();
+document.getElementById("headerDate").textContent = todayObj.toLocaleDateString("en-IN", {
+  weekday: "long", year: "numeric", month: "long", day: "numeric"
+});
+
+// --- Helpers ---
+function stripHtml(html) {
+  const div = document.createElement("div");
+  div.innerHTML = html || "";
+  return (div.textContent || div.innerText || "").replace(/\s+/g, " ").trim();
+}
+
+function parseFirstImg(html) {
+  const div = document.createElement("div");
+  div.innerHTML = html || "";
+  const img = div.querySelector("img");
+  return img ? img.src : "";
+}
+
+// --- Student-Friendly Filter ---
+function filterStudentNews(arr) {
+  const badWords = [
+    "murder","kill","killed","shot","violence","rape","abuse","sexual",
+    "theft","robbery","stolen","crime","arrest","assault","suicide",
+    "terror","bomb","attack","hijack","fraud","molest","corpse","dead body"
+  ];
+
+  return arr.filter(n => {
+    const text = (n.title + " " + n.description).toLowerCase();
+    return !badWords.some(b => text.includes(b));
+  });
+}
+
+// --- Strict India-Only Filter for National News ---
+function filterIndiaOnly(arr) {
+  const indiaIndicators = [
+    "india","indian","delhi","new delhi","mumbai","chennai","kolkata","bengaluru","bangalore",
+    "hyderabad","ahmedabad","pune","kerala","tamil nadu","karnataka","maharashtra","gujarat",
+    "rajasthan","punjab","haryana","uttar pradesh","bihar","odisha","assam","telangana",
+    "andhra","madhya pradesh","chhattisgarh","jharkhand","uttarakhand","himachal","goa",
+    "kashmir","ladakh","sikkim","manipur","meghalaya","mizoram","nagaland","tripura",
+    "arunachal","puducherry","isro","drdo","iit","iim","aiims","ncert","cbse","ugc","aicte",
+    "supreme court","high court","lok sabha","rajya sabha","parliament","rbi","rupee","₹",
+    "crore","lakh","pm modi","president murmu","minister","ministry","railway","vande bharat"
+  ];
+
+  const foreignExclusions = [
+    "trump","biden","white house","pentagon","uk parliament","gaza","israel","ukraine",
+    "russia","kremlin","beijing","pakistan","imran khan","bangladesh","sri lanka",
+    "nepal","maldives","wall street","eu ","european union","nato","bundestag"
+  ];
+
+  return arr.filter(n => {
+    const text = (n.title + " " + n.description).toLowerCase();
+    const hasIndiaTerm = indiaIndicators.some(k => text.includes(k));
+    const hasForeignOnly = foreignExclusions.some(f => text.includes(f)) && !text.includes("india");
+    if (hasForeignOnly) return false;
+    return hasIndiaTerm;
+  });
+}
+
+// --- Live Current Date Schedule Fetcher from agmhss.github.io/scheduler ---
+async function fetchTodaySchedule() {
+  const yyyy = todayObj.getFullYear();
+  const mm = String(todayObj.getMonth() + 1).padStart(2, "0");
+  const dd = String(todayObj.getDate()).padStart(2, "0");
+
+  const isoToday = `${yyyy}-${mm}-${dd}`;
+  const dmyDash = `${dd}-${mm}-${yyyy}`;
+  const dmySlash = `${dd}/${mm}/${yyyy}`;
+  const shortMonth = todayObj.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const shortMonthIN = todayObj.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+
+  const isDateMatch = (str) => {
+    if (!str) return false;
+    const s = String(str).trim();
+    if (s.includes(isoToday) || s.includes(dmyDash) || s.includes(dmySlash)) return true;
+    // Direct Date parse check for ISO / standard timestamps
+    const parsed = new Date(s);
+    if (!isNaN(parsed.getTime())) {
+      const pY = parsed.getFullYear();
+      const pM = String(parsed.getMonth() + 1).padStart(2, "0");
+      const pD = String(parsed.getDate()).padStart(2, "0");
+      if (`${pY}-${pM}-${pD}` === isoToday) return true;
+    }
+    return false;
+  };
+
+  const normalizeEvents = (rawArray) => {
+    if (!Array.isArray(rawArray)) return [];
+    return rawArray
+      .filter(ev => {
+        const dateVal = ev.isoDate || ev.date || ev.eventDate || ev.startDate || ev.Date || ev.timestamp || "";
+        return isDateMatch(dateVal);
+      })
+      .map(ev => ({
+        title: stripHtml(ev.title || ev.event || ev.name || ev.activity || ev.Title || "School Event"),
+        category: stripHtml(ev.category || ev.type || ev.target || ev.audience || ev.Category || ""),
+        description: stripHtml(ev.description || ev.details || ev.note || ev.circular || ev.Description || ""),
+        time: stripHtml(ev.time || ev.slot || "")
+      }));
+  };
+
+  try {
+    // 1. Fetch scheduler HTML page (direct or via CORS fallback)
+    let htmlText = "";
+    try {
+      const res = await fetch(SCHEDULER_URL, { cache: "no-store" });
+      if (res.ok) htmlText = await res.text();
+    } catch (_) {
+      const proxyRes = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(SCHEDULER_URL)}`);
+      if (proxyRes.ok) htmlText = await proxyRes.text();
+    }
+
+    if (htmlText) {
+      // 2. Check if the scheduler page embeds a Google Apps Script Web App JSON endpoint
+      const gasRegex = /https:\/\/script\.google\.com\/macros\/s\/[a-zA-Z0-9_-]+\/exec[^\s"'`]*/g;
+      const gasMatches = htmlText.match(gasRegex);
+      if (gasMatches && gasMatches.length > 0) {
+        for (const gasUrl of [...new Set(gasMatches)]) {
+          try {
+            const gRes = await fetch(gasUrl);
+            if (gRes.ok) {
+              const gJson = await gRes.json();
+              const arr = Array.isArray(gJson) ? gJson : (gJson.events || gJson.data || gJson.items || []);
+              const matched = normalizeEvents(arr);
+              if (matched.length > 0) return matched;
+            }
+          } catch (e) {
+            console.warn("GAS endpoint check skipped:", e);
+          }
+        }
+      }
+
+      // 3. Check for embedded SC_WIDGET_EVENTS or EVENTS array inside script tags
+      const varMatch = htmlText.match(/(?:SC_WIDGET_EVENTS|EVENTS|scheduleData|eventsData)\s*=\s*(\[[\s\S]*?\]);/);
+      if (varMatch && varMatch[1]) {
+        try {
+          const parsedArr = new Function(`return ${varMatch[1]}`)();
+          const matched = normalizeEvents(parsedArr);
+          if (matched.length > 0) return matched;
+        } catch (e) {
+          console.warn("Embedded event array parse skipped:", e);
+        }
+      }
+
+      // 4. Parse rendered HTML DOM elements containing today's date
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(htmlText, "text/html");
+      const domEvents = [];
+      const candidates = doc.querySelectorAll("[data-date], [data-isodate], .event-card, .schedule-item, .event-item, tr, li");
+
+      candidates.forEach(el => {
+        const dataDate = el.getAttribute("data-date") || el.getAttribute("data-isodate") || "";
+        const text = (el.textContent || "").replace(/\s+/g, " ").trim();
+        if (
+          isDateMatch(dataDate) ||
+          text.includes(isoToday) ||
+          text.includes(dmyDash) ||
+          text.includes(dmySlash) ||
+          text.includes(shortMonth) ||
+          text.includes(shortMonthIN)
+        ) {
+          if (text.length > 5 && text.length < 300) {
+            domEvents.push({ title: text, category: "Schedule", description: "", time: "" });
+          }
+        }
+      });
+
+      if (domEvents.length > 0) return domEvents;
+    }
+  } catch (err) {
+    console.warn("Could not fetch schedule from scheduler:", err);
+  }
+  return [];
+}
+
+function renderSchedule(events) {
+  const box = document.getElementById("schedule-content");
+  if (!events || events.length === 0) {
+    box.innerHTML = `<p class="no-schedule">No special scheduled events listed for today (${todayObj.toLocaleDateString("en-IN")}). Regular school timetable applies.</p>`;
+    return;
+  }
+
+  const ul = document.createElement("ul");
+  ul.className = "schedule-list";
+  events.forEach(ev => {
+    const li = document.createElement("li");
+    const badge = ev.category ? `<span class="schedule-badge">${ev.category}</span>` : "";
+    const timeStr = ev.time ? `<strong>[${ev.time}]</strong> ` : "";
+    const descStr = ev.description ? ` — <span>${ev.description}</span>` : "";
+    li.innerHTML = `${badge}${timeStr}<strong>${ev.title}</strong>${descStr}`;
+    ul.appendChild(li);
+  });
+  box.innerHTML = "";
+  box.appendChild(ul);
+}
+
+// --- Robust RSS Fetch using RSS2JSON with AllOrigins XML Fallback ---
+async function parseRSS(url) {
+  try {
+    const apiUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}`;
+    const res = await fetch(apiUrl);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.status === "ok" && Array.isArray(data.items)) {
+        return data.items.map((it, i) => ({
+          id: url + "#" + i,
+          title: stripHtml(it.title || ""),
+          description: stripHtml(it.description || ""),
+          link: it.link || "",
+          pubDate: it.pubDate || "",
+          image: it.thumbnail || (it.enclosure && it.enclosure.link) || parseFirstImg(it.content || it.description) || "",
+          source: new URL(url).host.replace("www.", "")
+        }));
+      }
+    }
+  } catch (_) {}
+
+  // Fallback direct XML parse via AllOrigins if RSS2JSON rate-limits
+  try {
+    const rawUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+    const res = await fetch(rawUrl);
+    if (!res.ok) return [];
+    const xmlText = await res.text();
+    const xml = new DOMParser().parseFromString(xmlText, "text/xml");
+    const items = Array.from(xml.querySelectorAll("item"));
+    return items.map((it, i) => {
+      const descHtml = it.querySelector("description")?.textContent || "";
+      const mediaContent = it.getElementsByTagName("media:content")[0];
+      const mediaThumb = it.getElementsByTagName("media:thumbnail")[0];
+      const enclosure = it.querySelector("enclosure");
+      const imgUrl =
+        (mediaContent && mediaContent.getAttribute("url")) ||
+        (mediaThumb && mediaThumb.getAttribute("url")) ||
+        (enclosure && enclosure.getAttribute("url")) ||
+        parseFirstImg(descHtml) || "";
+
+      return {
+        id: url + "#" + i,
+        title: stripHtml(it.querySelector("title")?.textContent || ""),
+        description: stripHtml(descHtml),
+        link: (it.querySelector("link")?.textContent || "").trim(),
+        pubDate: it.querySelector("pubDate")?.textContent || "",
+        image: imgUrl,
+        source: new URL(url).host.replace("www.", "")
+      };
+    });
+  } catch (e) {
+    console.warn("Feed failed:", url, e);
+    return [];
+  }
+}
+
+async function fetchCategoryFeeds(urls) {
+  const results = await Promise.all(urls.map(u => parseRSS(u)));
+  return results.flat();
+}
+
+function dedupeAndLimit(arr, limit) {
+  const seen = new Set();
+  const out = [];
+  for (const item of arr) {
+    if (!item.title) continue;
+    const key = item.title.toLowerCase().slice(0, 65);
+    if (!seen.has(key)) {
+      seen.add(key);
+      out.push(item);
+      if (out.length >= limit) break;
+    }
+  }
+  return out;
+}
+
+async function loadAllData() {
+  const [schedule, regionalRaw, nationalRaw, educationRaw, sportsRaw, internationalRaw] = await Promise.all([
+    fetchTodaySchedule(),
+    fetchCategoryFeeds(FEEDS.regional),
+    fetchCategoryFeeds(FEEDS.national),
+    fetchCategoryFeeds(FEEDS.education),
+    fetchCategoryFeeds(FEEDS.sports),
+    fetchCategoryFeeds(FEEDS.international)
+  ]);
+
+  return {
+    schedule,
+    regional: dedupeAndLimit(filterStudentNews(regionalRaw), LIMITS.regional),
+    national: dedupeAndLimit(filterIndiaOnly(filterStudentNews(nationalRaw)), LIMITS.national),
+    education: dedupeAndLimit(filterStudentNews(educationRaw), LIMITS.education),
+    sports: dedupeAndLimit(filterStudentNews(sportsRaw), LIMITS.sports),
+    international: dedupeAndLimit(filterStudentNews(internationalRaw), LIMITS.international)
+  };
+}
+
+// --- Rendering ---
+function renderNews(all) {
+  const container = document.getElementById("news");
+  container.innerHTML = "";
+
+  const totalArticles =
+    all.regional.length +
+    all.national.length +
+    all.education.length +
+    all.sports.length +
+    all.international.length;
+
+  if (totalArticles === 0) {
+    container.innerHTML = "<p class='error-msg'>Feeds are temporarily unavailable. Please refresh the page.</p>";
+    return;
+  }
+
+  const createSection = (title, arr) => {
+    if (!arr || arr.length === 0) return;
+    const sec = document.createElement("section");
+    const h2 = document.createElement("h2");
+    h2.textContent = title;
+    sec.appendChild(h2);
+
+    arr.forEach(a => {
+      const art = document.createElement("article");
+      if (a.image) {
+        const img = document.createElement("img");
+        img.src = a.image;
+        img.alt = "";
+        img.onerror = () => img.remove();
+        art.appendChild(img);
+      }
+      const div = document.createElement("div");
+      const pubStr = a.pubDate && !isNaN(new Date(a.pubDate))
+        ? " • " + new Date(a.pubDate).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })
+        : "";
+      div.innerHTML = `
+        <div class='meta'>${a.source}${pubStr}</div>
+        <h3>${a.title}</h3>
+        <p>${a.description || ""}</p>
+        <a href='${a.link}' target='_blank' rel='noopener'>Read full article ↗</a>`;
+      art.appendChild(div);
+      sec.appendChild(art);
+    });
+    container.appendChild(sec);
+  };
+
+  createSection("📍 Regional – Tamil Nadu", all.regional);
+  createSection("🇮🇳 National – India", all.national);
+  createSection("🎓 Education & Campus", all.education);
+  createSection("🏆 Sports", all.sports);
+  createSection("🌐 International", all.international);
+}
+
+// --- Voice Setup ---
+let allVoices = [];
+function loadVoices() { allVoices = window.speechSynthesis.getVoices(); }
+window.speechSynthesis.onvoiceschanged = loadVoices;
+
+function getVoice(gender) {
+  if (!allVoices.length) loadVoices();
+  const femaleNames = ["Google UK English Female", "Microsoft Zira", "Samantha", "Neerja", "Veena"];
+  const maleNames = ["Google UK English Male", "Microsoft David", "Alex", "Heera", "Rishi"];
+  const list = gender === "male" ? maleNames : femaleNames;
+  return (
+    allVoices.find(v => list.some(n => v.name.includes(n))) ||
+    allVoices.find(v => v.lang.startsWith("en-IN")) ||
+    allVoices.find(v => v.lang.startsWith("en")) ||
+    allVoices[0]
+  );
+}
+
+// --- Speech Script Builder ---
+function buildScript(data) {
+  const date = todayObj.toLocaleDateString("en-IN", { year: "numeric", month: "long", day: "numeric" });
+  const script = [
+    { gender: "female", text: `Good morning. This is your A G M H S S Daily News and School Bulletin for ${date}.` }
+  ];
+
+  if (data.schedule && data.schedule.length > 0) {
+    script.push({ gender: "male", text: "First, today's school schedule." });
+    data.schedule.forEach((ev, idx) => {
+      const desc = ev.description ? `. ${ev.description}` : "";
+      script.push({ gender: "male", text: `Event ${idx + 1}: ${ev.title}${desc}.` });
+    });
+  }
+
+  const addCategoryScript = (heading, arr, gender) => {
+    if (!arr || !arr.length) return;
+    script.push({ gender, text: heading });
+    arr.forEach((a, i) => {
+      const firstSentence = a.description ? a.description.split(/[.?!]/)[0] : "";
+      script.push({
+        gender,
+        text: `${i + 1}. ${a.title}. ${firstSentence ? firstSentence + "." : ""}`
+      });
+    });
+  };
+
+  addCategoryScript("Regional News, Tamil Nadu.", data.regional, "female");
+  addCategoryScript("National News, India.", data.national, "male");
+  addCategoryScript("Education News.", data.education, "female");
+  addCategoryScript("Sports Headlines.", data.sports, "male");
+  addCategoryScript("International News.", data.international, "female");
+
+  script.push({ gender: "female", text: "That concludes today's A G M H S S News bulletin. Have a productive day ahead!" });
+  return script;
+}
+
+function speakNews(data, rate) {
+  window.speechSynthesis.cancel();
+  const parts = buildScript(data);
+  const maleVoice = getVoice("male");
+  const femaleVoice = getVoice("female");
+
+  parts.forEach(p => {
+    const u = new SpeechSynthesisUtterance(p.text);
+    u.lang = "en-IN";
+    u.voice = p.gender === "male" ? maleVoice : femaleVoice;
+    u.rate = rate;
+    u.pitch = p.gender === "male" ? 1.0 : 1.1;
+    u.volume = 1;
+    window.speechSynthesis.speak(u);
+  });
+}
+
+// --- Multi-Page PDF Export ---
+function saveAsPDF(data) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: "pt", format: "a4" });
+
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 45;
+  const maxW = pageW - margin * 2;
+
+  const dateStr = todayObj.toLocaleDateString("en-IN", {
+    year: "numeric", month: "long", day: "numeric"
+  });
+
+  let y = margin;
+
+  const checkPageBreak = (neededHeight) => {
+    if (y + neededHeight > pageH - margin) {
+      doc.addPage();
+      y = margin;
+    }
+  };
+
+  // Title
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(17);
+  const title = `AGMHSS Daily News & Schedule – ${dateStr}`;
+  doc.text(title, (pageW - doc.getTextWidth(title)) / 2, y);
+  y += 24;
+
+  const writeSection = (heading, items, isSchedule = false) => {
+    if (!items || !items.length) return;
+    checkPageBreak(30);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(13);
+    doc.setTextColor(30, 64, 175);
+    doc.text(heading, margin, y);
+    y += 16;
+    doc.setTextColor(17, 24, 39);
+
+    items.forEach((item, i) => {
+      const headline = isSchedule
+        ? `${i + 1}. ${item.title}${item.category ? " (" + item.category + ")" : ""}`
+        : `${i + 1}. ${item.title}`;
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10.5);
+      const headLines = doc.splitTextToSize(headline, maxW);
+      checkPageBreak(headLines.length * 13 + 10);
+      headLines.forEach(l => {
+        doc.text(l, margin, y);
+        y += 13;
+      });
+
+      if (item.description) {
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9.5);
+        const descLines = doc.splitTextToSize(item.description, maxW - 12);
+        checkPageBreak(descLines.length * 12 + 8);
+        descLines.forEach(l => {
+          doc.text(l, margin + 10, y);
+          y += 12;
+        });
+      }
+      y += 4;
+    });
+    y += 8;
+  };
+
+  if (data.schedule && data.schedule.length) {
+    writeSection("Today's School Schedule", data.schedule, true);
+  }
+  writeSection("Regional – Tamil Nadu", data.regional);
+  writeSection("National – India", data.national);
+  writeSection("Education", data.education);
+  writeSection("Sports", data.sports);
+  writeSection("International", data.international);
+
+  doc.save(`AGMHSS_News_${dateStr.replace(/\s+/g, "_")}.pdf`);
+}
+
+// --- Initialize App ---
+(async () => {
+  try {
+    const allData = await loadAllData();
+    renderSchedule(allData.schedule);
+    renderNews(allData);
+
+    const play = document.getElementById("playBtn"),
+          pause = document.getElementById("pauseBtn"),
+          resume = document.getElementById("resumeBtn"),
+          stop = document.getElementById("stopBtn"),
+          speed = document.getElementById("speedRange"),
+          label = document.getElementById("speedLabel"),
+          pdfBtn = document.getElementById("pdfBtn");
+
+    let rate = parseFloat(speed.value);
+    speed.oninput = () => {
+      rate = parseFloat(speed.value);
+      label.textContent = rate.toFixed(2) + "×";
+    };
+    play.onclick = () => speakNews(allData, rate);
+    pause.onclick = () => window.speechSynthesis.pause();
+    resume.onclick = () => window.speechSynthesis.resume();
+    stop.onclick = () => window.speechSynthesis.cancel();
+    pdfBtn.onclick = () => saveAsPDF(allData);
+  } catch (e) {
+    console.error(e);
+    document.getElementById("news").innerHTML =
+      "<p class='error-msg'>Failed to load news feeds. Please check your connection and try again.</p>";
+  }
+})();
+</script>
+</body>
+</html>
